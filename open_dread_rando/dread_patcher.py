@@ -6,15 +6,16 @@ from pathlib import Path
 from construct import ListContainer
 from mercury_engine_data_structures.file_tree_editor import OutputFormat
 
-from open_dread_rando import elevator, lua_util, game_patches
-from open_dread_rando.cosmetic_patches import apply_cosmetic_patches
+from open_dread_rando import elevator, game_patches, lua_util
 from open_dread_rando.constants import FadeTimes
+from open_dread_rando.cosmetic_patches import apply_cosmetic_patches
 from open_dread_rando.custom_door_types import create_all_shield_assets
 from open_dread_rando.door_patcher import DoorPatcher
 from open_dread_rando.environmental_damage import apply_constant_damage
 from open_dread_rando.exefs import include_depackager, patch_exefs
 from open_dread_rando.logger import LOG
 from open_dread_rando.lua_editor import LuaEditor
+from open_dread_rando.missile_color_patcher import generate_missile_colors
 from open_dread_rando.objective import apply_objective_patches
 from open_dread_rando.output_config import output_format_for_category, output_paths_for_compatibility
 from open_dread_rando.patcher_editor import PatcherEditor
@@ -32,7 +33,7 @@ def _read_schema():
         return json.load(f)
 
 
-def create_custom_init(editor: PatcherEditor, configuration: dict):
+def create_custom_init(editor: PatcherEditor, configuration: dict) -> str:
     cosmetic_options: dict = configuration["cosmetic_patches"]["lua"]["custom_init"]
     inventory: dict[str, int] = configuration["starting_items"]
     starting_location: dict = configuration["starting_location"]
@@ -77,6 +78,10 @@ def create_custom_init(editor: PatcherEditor, configuration: dict):
             box_text = "|".join(box)
             patch_text(editor, f"RANDO_STARTING_TEXT_{textboxes}", box_text)
 
+    layout_uuid = None
+    if "layout_uuid" in configuration:
+        layout_uuid = lua_util.wrap_string(configuration["layout_uuid"])
+
     replacement = {
         "enable_remote_lua": enable_remote_lua,
         "new_game_inventory": final_inventory,
@@ -96,6 +101,7 @@ def create_custom_init(editor: PatcherEditor, configuration: dict):
         "room_id_fade_time": FadeTimes.NO_FADE.value if (
             cosmetic_options["enable_room_name_display"] != "WITH_FADE"
             ) else FadeTimes.ROOM_FADE.value,
+        "layout_uuid": layout_uuid,
     }
 
     replacement.update(configuration.get("game_patches", {}))
@@ -203,6 +209,7 @@ def patch_extracted(input_path: Path, output_path: Path, configuration: dict):
         elevator.patch_elevators(editor, configuration["elevators"])
 
     # Pickups
+    generate_missile_colors(editor)
     patch_pickups(editor, lua_scripts, configuration["pickups"], configuration)
 
     # Hints
